@@ -1,0 +1,43 @@
+%option noyywrap
+
+%{
+    #include <stdio.h>
+%}
+
+%%
+[ \t]           ; // ignore all whitespace
+\n				{ return T_ENDL;}
+[0-9]+          { return D_NUM;}
+[0-9A-F]+[hH]   { return H_NUM;}
+
+[$]v[A-Z]       { return T_VAR;}
+
+[+]             { return T_PLUS;}
+[-]             { return T_MINUS;}
+[*]             { return T_MUL;}
+[/]             { return T_DIV;}
+[%]             { return T_MOD;}
+[(]             { return LEFT_PAREN;}
+[)]             { return RIGHT_PAREN;}
+
+[=]             { return T_ASS;}
+SHD             { return T_SDEC;}
+SHH             { return T_SHEX;}
+SHN             { return T_SHNL;}
+SHS             { return T_SHSTR;}
+["]             { return T_DOUBQ;}
+[']             { return T_SINGQ;}
+
+if              { return T_IF;}
+then            { return T_THEN;}
+else            { return T_ELSE;}
+;               { return T_SEMI;}
+==              { return T_EQUL;}
+>               { return T_MORE;}             
+<               { return T_LESS;}
+>=              { return T_MOREEQ;}
+<=              { return T_LESSEQ;}
+!=              { return T_NOTEQ;}
+LOOP            { return T_LOOP;}
+,               { return T_COMMA;}
+%%
