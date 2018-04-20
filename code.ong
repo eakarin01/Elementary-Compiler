@@ -1,0 +1,17 @@
+$vA = 1
+$vB = 20
+$vC = 0
+
+LOOP($vA,$vB)
+    $vD = $vA % 2
+    if $vD == 0 then
+        SHS "Even"
+        $vC = $vC + $vA
+    ;
+    else
+        SHS "Odd"
+        $vC = $vC *(-1)
+    ;
+    $vA = $vA +1
+;
+SHH $vC
