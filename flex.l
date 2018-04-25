@@ -10,19 +10,20 @@ err         .
 
 %{
     #include <stdio.h>
+    #include <string.h>
     #include "grammar.tab.h"
 %}
 
 %%
 [ \t]           ; // ignore all whitespace
 \n				{ return T_ENDL;}
-[0-9]+          { return D_NUM;}
+[0-9]+          { yylval.val = atoi(yytext);return D_NUM;}
 [0-9A-F]+[hH]   { return H_NUM;}
 
-[$]v[A-Z]       { return T_VAR;}
+[$]v[A-Z]       { yylval.text = strdup(yytext);return T_VAR;}
 
-[+]             { return T_PLUS;}
-[-]             { return T_MINUS;}
+[+]             { yylval.text = strdup(yytext);return T_PLUS;}
+[-]             { yylval.text = strdup(yytext);return T_MINUS;}
 [*]             { return T_MUL;}
 [/]             { return T_DIV;}
 [%]             { return T_MOD;}
