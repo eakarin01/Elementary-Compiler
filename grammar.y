@@ -4,13 +4,14 @@
     #include <stdlib.h>
     #include <string.h>
     struct return_val{
-        char* cmd;
-        char* reg;
+        char cmd[10000];
+        char reg[10];
     }myreturn;
     struct argument{
         char* value;
         char* var_name;
         struct return_val ret;
+        struct return_val ret2;
     }parameter;
     int yylex(void);
     void yyerror (char const *);
@@ -41,7 +42,7 @@
 %precedence NEG
 %token T_ENDL
 
-%type<text> value T_PLUS operator T_MINUS T_MUL
+%type<text> value T_PLUS operator T_MINUS T_MUL T_DIV T_MOD
 %type<ret> expression
 
 /* The grammar follows. */
@@ -107,12 +108,29 @@ assign:
 expression:
   value             { parameter.value=$1;
                       $$=gen_code("value",parameter);
+                      //printf("{%p:%s}",&($$->cmd),$$->cmd);
                     }
 | T_VAR             
-| expression operator value   { parameter.ret = *($1);
-                                parameter.value=$3;
+| expression T_PLUS expression   { 
+                                    /*printf("[%p:%s]",&($1->cmd),$1->cmd);
+                                    printf("[%p:%s]",&($3->cmd),$3->cmd);*/
+                                    parameter.ret = *($1);
+                                parameter.ret2 = *($3);
                                 $$=gen_code($2,parameter);
                               }
+| expression T_MINUS expression   { parameter.ret = *($1);
+                                parameter.ret2 = *($3);
+                                $$=gen_code($2,parameter);
+                              } 
+| expression T_MUL expression   { parameter.ret = *($1);
+                                parameter.ret2 = *($3);
+                                $$=gen_code($2,parameter);
+                              }    
+| expression T_DIV expression   { parameter.ret = *($1);
+                                parameter.ret2 = *($3);
+                                $$=gen_code($2,parameter);
+                              } 
+| expression T_MOD expression                                                                                                                                               
 | expression operator parenthesis
 | T_MINUS expression %prec NEG
 | parenthesis
@@ -137,8 +155,8 @@ operator:
   T_PLUS          {$$=$1;}             
 | T_MINUS         {$$=$1;}           
 | T_MUL           {$$=$1;}
-| T_DIV
-| T_MOD
+| T_DIV           {$$=$1;}
+| T_MOD           {$$=$1;}
 ;
 
 %%
@@ -159,44 +177,53 @@ struct return_val* gen_code(char * format,struct argument arg)
     if(!strcmp(format,"value"))
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
-      char command[100000];
-      char regname[5];
+      char command[10000];
+      char regname[10];
       sprintf(command,"MOV r%d,%d\n",countreg,atoi(arg.value));
       sprintf(regname,"r%d",countreg++);
-      ret->cmd = command;
-      ret->reg = regname;
+      strcpy(ret->cmd,command);
+      strcpy(ret->reg,regname);
       return ret;
     }
     else if(!strcmp(format,"assign"))
     {
-      printf("%s",parameter.ret.cmd);
-      printf("STR %s,%s\n",parameter.var_name,parameter.ret.reg);
+      printf("%s",arg.ret.cmd);
+      printf("STR %s,%s\n",arg.var_name,arg.ret.reg);
     }
     else if(!strcmp(format,"+"))
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
-      char command[100000];
-      sprintf(command,"%sADD %s,%d\n",parameter.ret.cmd,parameter.ret.reg,atoi(parameter.value));
-      ret->cmd = command;
-      ret->reg = parameter.ret.reg;
+      char command[10000];
+      sprintf(command,"%s%sADD %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
+      strcpy(ret->cmd,command);
+      strcpy(ret->reg,arg.ret.reg);
       return ret;
     }
     else if(!strcmp(format,"-"))
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
-      char command[100000];
-      sprintf(command,"%sSUB %s,%d\n",parameter.ret.cmd,parameter.ret.reg,atoi(parameter.value));
-      ret->cmd = command;
-      ret->reg = parameter.ret.reg;
+      char command[10000];
+      sprintf(command,"%s%sSUB %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
+      strcpy(ret->cmd,command);
+      strcpy(ret->reg,arg.ret.reg);
       return ret;
     }
     else if(!strcmp(format,"*"))
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
-      char command[100000];
-      sprintf(command,"%sMUL %s,%d\n",parameter.ret.cmd,parameter.ret.reg,atoi(parameter.value));
-      ret->cmd = command;
-      ret->reg = parameter.ret.reg;
+      char command[10000];
+      sprintf(command,"%s%sMUL %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
+      strcpy(ret->cmd,command);
+      strcpy(ret->reg,arg.ret.reg);
+      return ret;
+    }
+    else if(!strcmp(format,"/"))
+    {
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[10000];
+      sprintf(command,"%s%sDIV %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
+      strcpy(ret->cmd,command);
+      strcpy(ret->reg,arg.ret.reg);
       return ret;
     }
 

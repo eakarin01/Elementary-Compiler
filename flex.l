@@ -25,8 +25,8 @@ err         .
 [+]             { yylval.text = strdup(yytext);return T_PLUS;}
 [-]             { yylval.text = strdup(yytext);return T_MINUS;}
 [*]             { yylval.text = strdup(yytext);return T_MUL;}
-[/]             { return T_DIV;}
-[%]             { return T_MOD;}
+[/]             { yylval.text = strdup(yytext);return T_DIV;}
+[%]             { yylval.text = strdup(yytext);return T_MOD;}
 [(]             { return LEFT_PAREN;}
 [)]             { return RIGHT_PAREN;}
 
