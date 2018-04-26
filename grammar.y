@@ -3,27 +3,31 @@
     #include <stdio.h>
     #include <stdlib.h>
     #include <string.h>
+    struct return_val{
+        char* cmd;
+        char* reg;
+    }myreturn;
     struct argument{
-        int value;
-        int value2;
-        char *var_name;
-        int ret_reg;
+        char* value;
+        char* var_name;
+        struct return_val ret;
     }parameter;
     int yylex(void);
     void yyerror (char const *);
     void initBison(char const *);
-    void gen_code(char*,struct argument);
+    struct return_val* gen_code(char*,struct argument);
     int countreg = 1;
 %}
 
 %union {
   int val;
   char* text;
+  struct return_val* ret;
 }
 
 /* Bison declarations */
-%token<val> D_NUM H_NUM
-%token<text>  T_VAR
+%token<text> D_NUM H_NUM
+%token<text> T_VAR
 %token STRING_LITERAL
 %right T_ASS
 %left T_EQUL T_MORE T_LESS T_MOREEQ T_LESSEQ T_NOTEQ
@@ -37,15 +41,15 @@
 %precedence NEG
 %token T_ENDL
 
-%type<val> value
-%type<text> T_PLUS T_MINUS operator
+%type<text> value T_PLUS operator T_MINUS T_MUL
+%type<ret> expression
 
 /* The grammar follows. */
 
 %%
 input:
   %empty
-| input command {initBison("");}
+| input command {}
 ;
 
 command:
@@ -91,31 +95,24 @@ value:
 ;
 
 assign:
-  T_VAR T_ASS expression    {   parameter.value=parameter.ret_reg;
-                                parameter.var_name = $1;
-                                gen_code("assign",parameter); 
-                            }   
+  T_VAR T_ASS expression    { 
+                              parameter.var_name=$1;
+                              parameter.ret = *($3);
+                              gen_code("assign",parameter);
+                            }
 ;
 
 
 
 expression:
-  value             {   parameter.value=$1;
-                        parameter.var_name=NULL;
-                        gen_code("value",parameter);
+  value             { parameter.value=$1;
+                      $$=gen_code("value",parameter);
                     }
-| T_VAR
-| expression operator value         {   
-                                        int r1 = parameter.ret_reg;
-                                        parameter.value=$3;
-                                        parameter.var_name=NULL;
-                                        gen_code("value",parameter);
-                                        int r2 = parameter.ret_reg;
-                                        parameter.value = r1;
-                                        parameter.value2 = r2;
-                                        gen_code($2,parameter);
-
-                                    }
+| T_VAR             
+| expression operator value   { parameter.ret = *($1);
+                                parameter.value=$3;
+                                $$=gen_code($2,parameter);
+                              }
 | expression operator parenthesis
 | T_MINUS expression %prec NEG
 | parenthesis
@@ -137,9 +134,9 @@ compare:
 ;
 
 operator:
-  T_PLUS                    {$$=$1;}
-| T_MINUS                   {$$=$1;}
-| T_MUL
+  T_PLUS          {$$=$1;}             
+| T_MINUS         {$$=$1;}           
+| T_MUL           {$$=$1;}
 | T_DIV
 | T_MOD
 ;
@@ -157,29 +154,52 @@ void initBison(char const *s)
     printf("%s\n",s);
 }
 
-void gen_code(char * format,struct argument arg)
+struct return_val* gen_code(char * format,struct argument arg)
 {
     if(!strcmp(format,"value"))
     {
-        printf("MOV r%d,%d\n",countreg++,arg.value);
-        parameter.ret_reg = countreg-1;
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[100000];
+      char regname[5];
+      sprintf(command,"MOV r%d,%d\n",countreg,atoi(arg.value));
+      sprintf(regname,"r%d",countreg++);
+      ret->cmd = command;
+      ret->reg = regname;
+      return ret;
     }
     else if(!strcmp(format,"assign"))
     {
-        printf("STR %s,r%d\n",arg.var_name,arg.value);
-        countreg = 1;
+      printf("%s",parameter.ret.cmd);
+      printf("STR %s,%s\n",parameter.var_name,parameter.ret.reg);
     }
     else if(!strcmp(format,"+"))
     {
-        printf("ADD r%d,r%d\n",arg.value,arg.value2);
-        parameter.ret_reg=arg.value;
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[100000];
+      sprintf(command,"%sADD %s,%d\n",parameter.ret.cmd,parameter.ret.reg,atoi(parameter.value));
+      ret->cmd = command;
+      ret->reg = parameter.ret.reg;
+      return ret;
     }
     else if(!strcmp(format,"-"))
     {
-        
-        printf("SUB r%d,r%d\n",arg.value,arg.value2);
-        parameter.ret_reg=arg.value;
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[100000];
+      sprintf(command,"%sSUB %s,%d\n",parameter.ret.cmd,parameter.ret.reg,atoi(parameter.value));
+      ret->cmd = command;
+      ret->reg = parameter.ret.reg;
+      return ret;
     }
+    else if(!strcmp(format,"*"))
+    {
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[100000];
+      sprintf(command,"%sMUL %s,%d\n",parameter.ret.cmd,parameter.ret.reg,atoi(parameter.value));
+      ret->cmd = command;
+      ret->reg = parameter.ret.reg;
+      return ret;
+    }
+
 }
 
 int main()
