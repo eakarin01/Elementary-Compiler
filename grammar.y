@@ -16,8 +16,13 @@
     int yylex(void);
     void yyerror (char const *);
     void initBison(char const *);
+    int selectReg();
+    void clearReg(char[]);
     struct return_val* gen_code(char*,struct argument);
-    int countreg = 1;
+    char asmreg[][5] = {"RAX","RBX","RCX"};
+    int usereg[3] = {0,0,0};
+    int countreg = 0;
+    FILE *fp;
 %}
 
 %union {
@@ -42,7 +47,7 @@
 %precedence NEG
 %token T_ENDL
 
-%type<text> value T_PLUS operator T_MINUS T_MUL T_DIV T_MOD
+%type<text> value T_PLUS T_MINUS T_MUL T_DIV T_MOD
 %type<ret> expression
 
 /* The grammar follows. */
@@ -108,38 +113,33 @@ assign:
 expression:
   value             { parameter.value=$1;
                       $$=gen_code("value",parameter);
-                      //printf("{%p:%s}",&($$->cmd),$$->cmd);
+                      //printf("[%d]",atoi($1));
                     }
 | T_VAR             
-| expression T_PLUS expression   { 
+| expression T_PLUS expression    { 
                                     /*printf("[%p:%s]",&($1->cmd),$1->cmd);
                                     printf("[%p:%s]",&($3->cmd),$3->cmd);*/
                                     parameter.ret = *($1);
-                                parameter.ret2 = *($3);
-                                $$=gen_code($2,parameter);
-                              }
+                                    parameter.ret2 = *($3);
+                                    $$=gen_code($2,parameter);
+                                  }
 | expression T_MINUS expression   { parameter.ret = *($1);
-                                parameter.ret2 = *($3);
-                                $$=gen_code($2,parameter);
-                              } 
-| expression T_MUL expression   { parameter.ret = *($1);
-                                parameter.ret2 = *($3);
-                                $$=gen_code($2,parameter);
-                              }    
-| expression T_DIV expression   { parameter.ret = *($1);
-                                parameter.ret2 = *($3);
-                                $$=gen_code($2,parameter);
-                              } 
-| expression T_MOD expression                                                                                                                                               
-| expression operator parenthesis
+                                    parameter.ret2 = *($3);
+                                    $$=gen_code($2,parameter);
+                                  } 
+| expression T_MUL expression     { parameter.ret = *($1);
+                                    parameter.ret2 = *($3);
+                                    //printf("[%s]",$3->cmd);
+                                    $$=gen_code($2,parameter);
+                                  }    
+| expression T_DIV expression     { parameter.ret = *($1);
+                                    parameter.ret2 = *($3);
+                                    $$=gen_code($2,parameter);
+                                  } 
+| expression T_MOD expression      
+| LEFT_PAREN expression RIGHT_PAREN   {$$=$2;}                                                                                                                                         
 | T_MINUS expression %prec NEG
-| parenthesis
 ;
-
-parenthesis:
-LEFT_PAREN expression RIGHT_PAREN
-;
-
 
 
 compare:
@@ -151,13 +151,6 @@ compare:
 | T_NOTEQ
 ;
 
-operator:
-  T_PLUS          {$$=$1;}             
-| T_MINUS         {$$=$1;}           
-| T_MUL           {$$=$1;}
-| T_DIV           {$$=$1;}
-| T_MOD           {$$=$1;}
-;
 
 %%
 
@@ -172,6 +165,30 @@ void initBison(char const *s)
     printf("%s\n",s);
 }
 
+int selectReg()
+{
+  for(int i=0;i<3;i++)
+  {
+    if (usereg[i]==0)
+    {
+      usereg[i]=1;
+      return i;
+    }
+  }
+  return -1;
+}
+
+void clearReg(char regname[])
+{
+  for(int i=0;i<3;i++)
+  {
+    if(!strcmp(regname,asmreg[i]))
+    {
+      usereg[i]=0;
+    }
+  }
+}
+
 struct return_val* gen_code(char * format,struct argument arg)
 {
     if(!strcmp(format,"value"))
@@ -179,8 +196,17 @@ struct return_val* gen_code(char * format,struct argument arg)
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
       char command[10000];
       char regname[10];
-      sprintf(command,"MOV r%d,%d\n",countreg,atoi(arg.value));
-      sprintf(regname,"r%d",countreg++);
+      int regid = selectReg();
+      if (regid==-1)
+      {
+        strcpy(command,"");
+        sprintf(regname,"%s",arg.value);
+      }
+      else
+      {
+        sprintf(command,"\t\tMOV %s,%d\n",asmreg[regid],atoi(arg.value));
+        sprintf(regname,"%s",asmreg[regid]);
+      }
       strcpy(ret->cmd,command);
       strcpy(ret->reg,regname);
       return ret;
@@ -188,42 +214,47 @@ struct return_val* gen_code(char * format,struct argument arg)
     else if(!strcmp(format,"assign"))
     {
       printf("%s",arg.ret.cmd);
-      printf("STR %s,%s\n",arg.var_name,arg.ret.reg);
+      printf("\t\tSTR %s,%s\n",arg.var_name,arg.ret.reg);
+      clearReg(arg.ret.reg);
     }
     else if(!strcmp(format,"+"))
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
       char command[10000];
-      sprintf(command,"%s%sADD %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
+      sprintf(command,"%s%s\t\tADD %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
       strcpy(ret->cmd,command);
       strcpy(ret->reg,arg.ret.reg);
+      clearReg(arg.ret2.reg);
       return ret;
     }
     else if(!strcmp(format,"-"))
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
       char command[10000];
-      sprintf(command,"%s%sSUB %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
+      sprintf(command,"%s%s\t\tSUB %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
       strcpy(ret->cmd,command);
       strcpy(ret->reg,arg.ret.reg);
+      clearReg(arg.ret2.reg);
       return ret;
     }
     else if(!strcmp(format,"*"))
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
       char command[10000];
-      sprintf(command,"%s%sMUL %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
+      sprintf(command,"%s%s\t\tMUL %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
       strcpy(ret->cmd,command);
       strcpy(ret->reg,arg.ret.reg);
+      clearReg(arg.ret2.reg);
       return ret;
     }
     else if(!strcmp(format,"/"))
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
       char command[10000];
-      sprintf(command,"%s%sDIV %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
+      sprintf(command,"%s%s\t\tDIV %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
       strcpy(ret->cmd,command);
       strcpy(ret->reg,arg.ret.reg);
+      clearReg(arg.ret2.reg);
       return ret;
     }
 
@@ -231,9 +262,7 @@ struct return_val* gen_code(char * format,struct argument arg)
 
 int main()
 {
-    int status = yyparse();
-    while(!status)
-    {
-        status = yyparse();
-    }
+  //fp = fopen("test.asm","w");  
+  int status = yyparse();
+  //fclose(fp);
 }
