@@ -18,6 +18,7 @@
     void initBison(char const *);
     int selectReg();
     void clearReg(char[]);
+    int isRegister(char []);
     struct return_val* gen_code(char*,struct argument);
     char asmreg[][5] = {"RAX","RBX","RDX"};
     int usereg[3] = {0,0,0};
@@ -189,6 +190,18 @@ void clearReg(char regname[])
   }
 }
 
+int isRegister(char name[])
+{
+  for(int i=0;i<3;i++)
+  {
+    if(!strcmp(asmreg[i],name))
+    {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 struct return_val* gen_code(char * format,struct argument arg)
 {
     if(!strcmp(format,"value"))
@@ -196,7 +209,7 @@ struct return_val* gen_code(char * format,struct argument arg)
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
       char command[10000];
       char regname[10];
-      int regid = selectReg();
+      /*int regid = selectReg();
       // no one empty register
       if (regid==-1)
       {
@@ -209,7 +222,9 @@ struct return_val* gen_code(char * format,struct argument arg)
         sprintf(regname,"%s",asmreg[regid]);
       }
       strcpy(ret->cmd,command);
-      strcpy(ret->reg,regname);
+      strcpy(ret->reg,regname);*/
+      strcpy(ret->cmd,"");
+      strcpy(ret->reg,arg.value);
       return ret;
     }
     else if(!strcmp(format,"assign"))
@@ -226,9 +241,17 @@ struct return_val* gen_code(char * format,struct argument arg)
       // get return command
       sprintf(command,"%s%s",arg.ret.cmd,arg.ret2.cmd);
       // ADD command
-      sprintf(command,"%sADD %s,%s\n",command,arg.ret.reg,arg.ret2.reg);
+      char regname[10];
+      strcpy(regname,arg.ret.reg);
+      if(!isRegister(arg.ret.reg))
+      {
+        int regid = selectReg();
+        sprintf(command,"%sMOV %s,%s\n",command,asmreg[regid],arg.ret.reg);
+        strcpy(regname,asmreg[regid]);
+      }
+      sprintf(command,"%sADD %s,%s\n",command,regname,arg.ret2.reg);
       strcpy(ret->cmd,command);
-      strcpy(ret->reg,arg.ret.reg);
+      strcpy(ret->reg,regname);
       clearReg(arg.ret2.reg);
       return ret;
     }
@@ -239,9 +262,17 @@ struct return_val* gen_code(char * format,struct argument arg)
       // get return command
       sprintf(command,"%s%s",arg.ret.cmd,arg.ret2.cmd);
       // SUB command
-      sprintf(command,"%sSUB %s,%s\n",command,arg.ret.reg,arg.ret2.reg);
+      char regname[10];
+      strcpy(regname,arg.ret.reg);
+      if(!isRegister(arg.ret.reg))
+      {
+        int regid = selectReg();
+        sprintf(command,"%sMOV %s,%s\n",command,asmreg[regid],arg.ret.reg);
+        strcpy(regname,asmreg[regid]);
+      }
+      sprintf(command,"%sSUB %s,%s\n",command,regname,arg.ret2.reg);
       strcpy(ret->cmd,command);
-      strcpy(ret->reg,arg.ret.reg);
+      strcpy(ret->reg,regname);
       clearReg(arg.ret2.reg);
       return ret;
     }
@@ -253,16 +284,41 @@ struct return_val* gen_code(char * format,struct argument arg)
       // get return command
       sprintf(command,"%s%s",arg.ret.cmd,arg.ret2.cmd);
       // MUL command
-      // check RAX is empty
-      if (strcmp(arg.ret.reg,"RAX"))
+      // if right is in RAX
+      if (!strcmp(arg.ret2.reg,"RAX"))
       {
-        sprintf(command,"%sPUSH RAX\n",command);
+        int regid = selectReg();
+        sprintf(command,"%sMOV %s,%s\n",command,asmreg[regid],arg.ret2.reg);
+        strcpy(arg.ret2.reg,asmreg[regid]);
+        sprintf(command,"%sMOV RAX,%s\n",command,arg.ret.reg);
+        usereg[0]=1;
+        clearReg(arg.ret.reg);
+      }
+      // if left is not in RAX
+      else if (strcmp(arg.ret.reg,"RAX"))
+      {
+        // check if RAX has been use
+        if (usereg[0])
+        {
+          sprintf(command,"%sPUSH RAX\n",command);
+          checkpush=1;
+        }
         sprintf(command,"%sMOV RAX,%s\n",command,arg.ret.reg);
         clearReg(arg.ret.reg);
-        checkpush=1;
+        usereg[0]=1;
       }
-      sprintf(command,"%sPUSH RDX\nIMUL %s\nPOP RDX\n",command,arg.ret2.reg);
-      clearReg(arg.ret2.reg);
+      // create register for return value 2
+      char regname[10];
+      strcpy(regname,arg.ret2.reg);
+      // if right is not register
+      if(!isRegister(arg.ret2.reg))
+      {
+        int regid = selectReg();
+        sprintf(command,"%sMOV %s,%s\n",command,asmreg[regid],arg.ret2.reg);
+        strcpy(regname,asmreg[regid]);
+      }
+      sprintf(command,"%sPUSH RDX\nIMUL %s\nPOP RDX\n",command,regname);
+      clearReg(regname);
       strcpy(ret->reg,"RAX");
       if (checkpush)
       {
@@ -282,16 +338,41 @@ struct return_val* gen_code(char * format,struct argument arg)
       // get return command
       sprintf(command,"%s%s",arg.ret.cmd,arg.ret2.cmd);
       // DIV command
-      // check RAX is empty
-      if (strcmp(arg.ret.reg,"RAX"))
+      // if right is in RAX
+      if (!strcmp(arg.ret2.reg,"RAX"))
       {
-        sprintf(command,"%sPUSH RAX\n",command);
+        int regid = selectReg();
+        sprintf(command,"%sMOV %s,%s\n",command,asmreg[regid],arg.ret2.reg);
+        strcpy(arg.ret2.reg,asmreg[regid]);
+        sprintf(command,"%sMOV RAX,%s\n",command,arg.ret.reg);
+        usereg[0]=1;
+        clearReg(arg.ret.reg);
+      }
+      // if left is not in RAX
+      else if (strcmp(arg.ret.reg,"RAX"))
+      {
+        // check if RAX has been use
+        if (usereg[0])
+        {
+          sprintf(command,"%sPUSH RAX\n",command);
+          checkpush=1;
+        }
         sprintf(command,"%sMOV RAX,%s\n",command,arg.ret.reg);
         clearReg(arg.ret.reg);
-        checkpush=1;
+        usereg[0]=1;
       }
-      sprintf(command,"%sPUSH RDX\nIDIV %s\nPOP RDX\n",command,arg.ret2.reg);
-      clearReg(arg.ret2.reg);
+      // create register for return value 2
+      char regname[10];
+      strcpy(regname,arg.ret2.reg);
+      // if right is not register
+      if(!isRegister(arg.ret2.reg))
+      {
+        int regid = selectReg();
+        sprintf(command,"%sMOV %s,%s\n",command,asmreg[regid],arg.ret2.reg);
+        strcpy(regname,asmreg[regid]);
+      }
+      sprintf(command,"%sPUSH RDX\nIDIV %s\nPOP RDX\n",command,regname);
+      clearReg(regname);
       strcpy(ret->reg,"RAX");
       if (checkpush)
       {
