@@ -19,7 +19,7 @@
     int selectReg();
     void clearReg(char[]);
     struct return_val* gen_code(char*,struct argument);
-    char asmreg[][5] = {"RAX","RBX","RCX"};
+    char asmreg[][5] = {"RAX","RBX","RDX"};
     int usereg[3] = {0,0,0};
     int countreg = 0;
     FILE *fp;
@@ -197,6 +197,7 @@ struct return_val* gen_code(char * format,struct argument arg)
       char command[10000];
       char regname[10];
       int regid = selectReg();
+      // no one empty register
       if (regid==-1)
       {
         strcpy(command,"");
@@ -204,7 +205,7 @@ struct return_val* gen_code(char * format,struct argument arg)
       }
       else
       {
-        sprintf(command,"\t\tMOV %s,%d\n",asmreg[regid],atoi(arg.value));
+        sprintf(command,"MOV %s,%d\n",asmreg[regid],atoi(arg.value));
         sprintf(regname,"%s",asmreg[regid]);
       }
       strcpy(ret->cmd,command);
@@ -213,15 +214,19 @@ struct return_val* gen_code(char * format,struct argument arg)
     }
     else if(!strcmp(format,"assign"))
     {
+      // get return command
       printf("%s",arg.ret.cmd);
-      printf("\t\tSTR %s,%s\n",arg.var_name,arg.ret.reg);
+      printf("MOV %s,%s\n",arg.ret.reg,arg.var_name);
       clearReg(arg.ret.reg);
     }
     else if(!strcmp(format,"+"))
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
       char command[10000];
-      sprintf(command,"%s%s\t\tADD %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
+      // get return command
+      sprintf(command,"%s%s",arg.ret.cmd,arg.ret2.cmd);
+      // ADD command
+      sprintf(command,"%sADD %s,%s\n",command,arg.ret.reg,arg.ret2.reg);
       strcpy(ret->cmd,command);
       strcpy(ret->reg,arg.ret.reg);
       clearReg(arg.ret2.reg);
@@ -231,7 +236,10 @@ struct return_val* gen_code(char * format,struct argument arg)
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
       char command[10000];
-      sprintf(command,"%s%s\t\tSUB %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
+      // get return command
+      sprintf(command,"%s%s",arg.ret.cmd,arg.ret2.cmd);
+      // SUB command
+      sprintf(command,"%sSUB %s,%s\n",command,arg.ret.reg,arg.ret2.reg);
       strcpy(ret->cmd,command);
       strcpy(ret->reg,arg.ret.reg);
       clearReg(arg.ret2.reg);
@@ -241,20 +249,58 @@ struct return_val* gen_code(char * format,struct argument arg)
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
       char command[10000];
-      sprintf(command,"%s%s\t\tMUL %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
-      strcpy(ret->cmd,command);
-      strcpy(ret->reg,arg.ret.reg);
+      int checkpush=0;
+      // get return command
+      sprintf(command,"%s%s",arg.ret.cmd,arg.ret2.cmd);
+      // MUL command
+      // check RAX is empty
+      if (strcmp(arg.ret.reg,"RAX"))
+      {
+        sprintf(command,"%sPUSH RAX\n",command);
+        sprintf(command,"%sMOV RAX,%s\n",command,arg.ret.reg);
+        clearReg(arg.ret.reg);
+        checkpush=1;
+      }
+      sprintf(command,"%sPUSH RDX\nIMUL %s\nPOP RDX\n",command,arg.ret2.reg);
       clearReg(arg.ret2.reg);
+      strcpy(ret->reg,"RAX");
+      if (checkpush)
+      {
+        int regid = selectReg();
+        sprintf(command,"%sMOV %s,RAX\n",command,asmreg[regid]);
+        sprintf(command,"%sPOP RAX\n",command);
+        strcpy(ret->reg,asmreg[regid]);
+      }
+      strcpy(ret->cmd,command);
       return ret;
     }
     else if(!strcmp(format,"/"))
     {
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
       char command[10000];
-      sprintf(command,"%s%s\t\tDIV %s,%s\n",arg.ret.cmd,arg.ret2.cmd,arg.ret.reg,arg.ret2.reg);
-      strcpy(ret->cmd,command);
-      strcpy(ret->reg,arg.ret.reg);
+      int checkpush=0;
+      // get return command
+      sprintf(command,"%s%s",arg.ret.cmd,arg.ret2.cmd);
+      // DIV command
+      // check RAX is empty
+      if (strcmp(arg.ret.reg,"RAX"))
+      {
+        sprintf(command,"%sPUSH RAX\n",command);
+        sprintf(command,"%sMOV RAX,%s\n",command,arg.ret.reg);
+        clearReg(arg.ret.reg);
+        checkpush=1;
+      }
+      sprintf(command,"%sPUSH RDX\nIDIV %s\nPOP RDX\n",command,arg.ret2.reg);
       clearReg(arg.ret2.reg);
+      strcpy(ret->reg,"RAX");
+      if (checkpush)
+      {
+        int regid = selectReg();
+        sprintf(command,"%sMOV %s,RAX\n",command,asmreg[regid]);
+        sprintf(command,"%sPOP RAX\n",command);
+        strcpy(ret->reg,asmreg[regid]);
+      }
+      strcpy(ret->cmd,command);
       return ret;
     }
 
