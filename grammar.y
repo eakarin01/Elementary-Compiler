@@ -25,6 +25,7 @@
     struct return_val* gen_code(char*,struct argument);
     char asmreg[][5] = {"rax","rbx","rdx"};
     int usereg[3] = {0,0,0};
+    int loopcount = 0;
     int msgcount = 0;
     int varflag[26];
     FILE *fp;
@@ -56,19 +57,20 @@
 %token T_ENDL
 
 %type<text> value T_PLUS T_MINUS T_MUL T_DIV T_MOD
-%type<ret> expression command assign
+%type<ret> expression command assign statement input
 
 /* The grammar follows. */
 
 %%
 start:
-  input { genasmfile(textcode,datacode);}
+  input { genasmfile($1->cmd,$1->data);}
 ;
 input:
-  %empty
-| input command     {  //printf("---------------------\n%s",$2->cmd);
-                        strcat(textcode,$2->cmd);
-                        strcat(datacode,$2->data);
+  %empty    {$$=gen_code("empty",parameter);}
+| input command     {  //printf("---------------------------------\n%s",$2->data);
+                      parameter.ret = *($1);
+                      parameter.ret2 = *($2);
+                      $$=gen_code("concat",parameter);
                     }
 ;
 
@@ -76,7 +78,14 @@ command:
   T_ENDL
 | assign T_ENDL                       { $$=$1;}
 
-| T_LOOP LEFT_PAREN value T_COMMA value RIGHT_PAREN T_ENDL statement T_SEMI T_ENDL
+| T_LOOP LEFT_PAREN value RIGHT_PAREN T_ENDL statement T_SEMI T_ENDL
+                    {
+                      parameter.value=$3;
+                      parameter.ret = *($6);
+                      $$=gen_code("LOOPN",parameter);
+                    }
+
+| T_LOOP LEFT_PAREN condition RIGHT_PAREN T_ENDL statement T_SEMI T_ENDL
 
 | if_stmt 
 | T_SDEC T_VAR T_ENDL
@@ -106,8 +115,13 @@ if_stmt:
 ;
 
 statement:
-  statement command
-| command
+  %empty      {$$=gen_code("empty",parameter);}
+| statement command              
+          {
+              parameter.ret = *($1);
+              parameter.ret2 = *($2);
+              $$=gen_code("concat",parameter);
+          }
 ;
 
 condition:
@@ -117,6 +131,7 @@ condition:
 value:
   D_NUM             {$$=$1;}
 | H_NUM             {$$=$1;}
+| T_VAR             {$$=$1;}
 ;
 
 assign:
@@ -133,9 +148,6 @@ expression:
   value             { parameter.value=$1;
                       $$=gen_code("value",parameter);
                       //printf("[%d]",atoi($1));
-                    }
-| T_VAR             { parameter.value=$1;
-                      $$=gen_code("value",parameter);
                     }
 | expression T_PLUS expression    { 
                                     /*printf("[%p:%s]",&($1->cmd),$1->cmd);
@@ -453,7 +465,7 @@ struct return_val* gen_code(char * format,struct argument arg)
         sprintf(command,"%s\t\tmov %s,%s\n",command,asmreg[regid],arg.ret2.reg);
         strcpy(regname,asmreg[regid]);
       }
-      sprintf(command,"%s\t\tIDIV %s\n",command,regname);
+      sprintf(command,"%s\t\txor rdx,rdx\n\t\tIDIV %s\n",command,regname);
       clearReg(regname);
       strcpy(ret->reg,"rax");
       if (checkpush)
@@ -507,7 +519,7 @@ struct return_val* gen_code(char * format,struct argument arg)
         sprintf(command,"%s\t\tmov %s,%s\n",command,asmreg[regid],arg.ret2.reg);
         strcpy(arg.ret2.reg,asmreg[regid]);
       }
-      sprintf(command,"%s\t\tIDIV %s\n",command,arg.ret2.reg);
+      sprintf(command,"%s\t\txor rdx,rdx\n\t\tIDIV %s\n",command,arg.ret2.reg);
       clearReg(arg.ret.reg);
       clearReg(arg.ret2.reg);
       if (checkpush)
@@ -543,6 +555,46 @@ struct return_val* gen_code(char * format,struct argument arg)
       strcpy(ret->data,"");
       //printf("%s",command);
       //printf("[%s]",data);
+      return ret;
+    }
+    else if(!strcmp(format,"empty"))
+    {
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      strcpy(ret->cmd,"");
+      strcpy(ret->data,"");
+      return ret;
+    }
+    else if(!strcmp(format,"concat"))
+    {
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[10000];
+      char data[10000];
+      // init form left
+      strcpy(command,arg.ret.cmd);
+      strcpy(data,arg.ret.data);
+      // concat wirh right
+      strcat(command,arg.ret2.cmd);
+      strcat(data,arg.ret2.data);
+      strcpy(ret->cmd,command);
+      strcpy(ret->data,data);
+      return ret;
+    }
+    else if(!strcmp(format,"LOOPN"))
+    {
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[10000];
+      // check if value is address variable
+      if (arg.value[0]=='$')
+      {
+        // take [] to variable
+        char regname[100];
+        sprintf(regname,"[%s]",arg.value);
+        strcpy(arg.value,regname);
+      }
+      sprintf(command,"\t\tPUSH rcx\n\t\tMOV rcx,%s\nL%d:\n\t\tPUSH rcx\n",arg.value,loopcount);
+      sprintf(command,"%s%s\t\tPOP rcx\n\t\tLOOP L%d\n\t\tPOP rcx\n",command,arg.ret.cmd,loopcount++);
+      strcpy(ret->cmd,command);
+      strcpy(ret->data,arg.ret.data);
       return ret;
     }
 
