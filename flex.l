@@ -17,9 +17,9 @@ err         .
 %%
 "//".*\n        ; // ignore comment
 [ \t]           ; // ignore all whitespace
-\n				{ return T_ENDL;}
+\n				{ yylval.text = strdup("");return T_ENDL;}
 [0-9]+          { yylval.text = strdup(yytext);return D_NUM;}
-[0-9A-F]+[hH]   { return H_NUM;}
+[0-9A-F]+[hH]   { yylval.text = strdup(yytext);return H_NUM;}
 
 [$]v[A-Z]       { yylval.text = strdup(yytext);return T_VAR;}
 
@@ -49,6 +49,6 @@ else            { return T_ELSE;}
 "!="            { return T_NOTEQ;}
 LOOP            { return T_LOOP;}
 ","             { return T_COMMA;}
-\"(\\.|[^\\"])*\" { return STRING_LITERAL;}
-\'(\\.|[^\\"])*\' { return STRING_LITERAL;}
+\"(\\.|[^\\"])*\" { yylval.text = strdup(yytext);return STRING_LITERAL;}
+\'(\\.|[^\\"])*\' { yylval.text = strdup(yytext);return STRING_LITERAL;}
 %%
