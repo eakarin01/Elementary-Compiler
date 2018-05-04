@@ -641,8 +641,9 @@ struct return_val* gen_code(char * format,struct argument arg)
         sprintf(regname,"[%s]",arg.value);
         strcpy(arg.value,regname);
       }
-      sprintf(command,"\t\tPUSH rcx\n\t\tMOV rcx,%s\nL%d:\n\t\tPUSH rcx\n",arg.value,loopcount);
-      sprintf(command,"%s%s\t\tPOP rcx\n\t\tdec rcx\n\t\tjnz L%d\n\t\tPOP rcx\n",command,arg.ret.cmd,loopcount++);
+      sprintf(command,"\t\tPUSH rcx\n\t\tMOV rcx,%s\nL%d:\n\t\tcmp rcx,0\n\t\tjle E%d\n\t\tPUSH rcx\n",arg.value,loopcount,loopcount);
+      sprintf(command,"%s%s\t\tPOP rcx\n\t\tdec rcx\n\t\tjmp L%d\nE%d:\n\t\tPOP rcx\n",command,arg.ret.cmd,loopcount,loopcount);
+      loopcount++;
       strcpy(ret->cmd,command);
       strcpy(ret->data,arg.ret.data);
       
