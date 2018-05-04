@@ -31,8 +31,12 @@
     int msgcount = 0;
     int ifcount = 0;
     int varflag[26];
+    int sd_flag = 0;
+    int sh_flag = 0;
+    int err_flag = 0;
     FILE *fp;
     char filename[20];
+    int yylineno;
 %}
 
 %union {
@@ -67,7 +71,8 @@
 %%
 start:
   input   {
-            genasmfile($1->cmd,$1->data);
+            if(!err_flag)
+              genasmfile($1->cmd,$1->data);
           }
 ;
 input:
@@ -80,7 +85,7 @@ input:
 ;
 
 command:
-  T_ENDL            { //printf("ONLYENDL\n");
+  T_ENDL            { 
                      $$=gen_code("empty",parameter);
                      }
 | assign T_ENDL                       { $$=$1;}
@@ -118,12 +123,14 @@ command:
               {
                 parameter.ret = *($2);
                 $$=gen_code("SHD",parameter);
+                sd_flag = 1;
               }
 
 | T_SHEX expression T_ENDL
               {
                 parameter.ret = *($2);
                 $$=gen_code("SHH",parameter);
+                sh_flag = 1;
               }
 
 | T_SHNL T_ENDL                       { 
@@ -134,6 +141,8 @@ command:
                                         parameter.len=strlen($2)-2;
                                         $$=gen_code("SHS",parameter);   
                                       }
+
+| error T_ENDL      {yyerrok ;} // when error occur skip token util T_ENDL
 
 ;
 
@@ -208,12 +217,23 @@ assign:
 expression:
   value             { strcat($1,"\0");
                       parameter.value=$1;
+                      // check if value is variable
+                      if ($1[0]=='$')
+                      {
+                        int idxvar = $1[2]-'A';
+                        // check if variable not declaration
+                        if (!varflag[idxvar])
+                        {
+                          char strerr[100];
+                          sprintf(strerr,"ERROR: No variable declaration (%s) in line %d",$1,yylineno);
+                          yyerror(strerr);
+                          err_flag=1;
+                          YYERROR;
+                        }
+                      }
                       $$=gen_code("value",parameter);
-                      //printf("[%d]",atoi($1));
                     }
 | expression T_PLUS expression    { 
-                                    /*printf("[%p:%s]",&($1->cmd),$1->cmd);
-                                    printf("[%p:%s]",&($3->cmd),$3->cmd);*/
                                     parameter.ret = *($1);
                                     parameter.ret2 = *($3);
                                     $$=gen_code($2,parameter);
@@ -224,15 +244,64 @@ expression:
                                   } 
 | expression T_MUL expression     { parameter.ret = *($1);
                                     parameter.ret2 = *($3);
-                                    //printf("[%s]",$3->cmd);
                                     $$=gen_code($2,parameter);
                                   }    
 | expression T_DIV expression     { parameter.ret = *($1);
                                     parameter.ret2 = *($3);
+                                    int number;
+                                    // check if isn't varable
+                                    if ($3->reg[0]!='[' && !isRegister($3->reg))
+                                    {
+                                      // check if hexa
+                                      if ($3->reg[strlen($3->reg)-1]=='h' || $3->reg[strlen($3->reg)-1]=='H')
+                                      {
+                                        // convert to number
+                                        number=(int)strtol($3->reg, NULL, 16);
+                                      }
+                                      else
+                                      {
+                                        // convert to number
+                                        number = atoi($3->reg);
+                                      }
+                                    }
+                                    // check in divide by zero
+                                    if (number==0)
+                                    {
+                                      char strerr[100];
+                                      sprintf(strerr,"ERROR: Divide by 0 in line %d",yylineno);
+                                      yyerror(strerr);
+                                      err_flag=1;
+                                      YYERROR;
+                                    }
                                     $$=gen_code($2,parameter);
                                   } 
 | expression T_MOD expression     { parameter.ret = *($1);
                                     parameter.ret2 = *($3);
+                                    int number;
+                                    // check if isn't varable
+                                    if ($3->reg[0]!='[' && !isRegister($3->reg))
+                                    {
+                                      // check if hexa
+                                      if ($3->reg[strlen($3->reg)-1]=='h' || $3->reg[strlen($3->reg)-1]=='H')
+                                      {
+                                        // convert to number
+                                        number=(int)strtol($3->reg, NULL, 16);
+                                      }
+                                      else
+                                      {
+                                        // convert to number
+                                        number = atoi($3->reg);
+                                      }
+                                    }
+                                    // check in divide by zero
+                                    if (number==0)
+                                    {
+                                      char strerr[100];
+                                      sprintf(strerr,"ERROR: Modulus by 0 in line %d",yylineno);
+                                      yyerror(strerr);
+                                      err_flag=1;
+                                      YYERROR;
+                                    }
                                     $$=gen_code("%%",parameter);
                                   }
 | LEFT_PAREN expression RIGHT_PAREN   {$$=$2;}                                                                                                                                         
@@ -342,7 +411,7 @@ struct return_val* gen_code(char * format,struct argument arg)
       // add section data
       strcpy(data,"");
       int idxvar = arg.var_name[2]-'A';
-      // check if already has
+      // check if never declaration
       if (!varflag[idxvar])
       {
         // gen section data code
@@ -862,62 +931,67 @@ void genasmfile(char text[],char data[])
   sprintf(file,"%ssection .text\n\t\tglobal _start\n_start:\n%s\n",file,text);
   // add exit program to my program
   sprintf(file,"%s\t\tmov rax,60\n\t\tmov rdi,0\n\t\tsyscall\n\n",file);
-  // gen print dec num function
-  sprintf(file,"%sprint_decnum:\n",file);
-  sprintf(file,"%s\t\tmov r8,20\n",file);
-  sprintf(file,"%s\t\tmov rbx,10\n",file);
-  sprintf(file,"%sdivloop:\n",file);
-  sprintf(file,"%s\t\tdec r8\n",file);
-  sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
-  sprintf(file,"%s\t\txor rdx,rdx\n",file);
-  sprintf(file,"%s\t\tidiv rbx\n",file);
-  sprintf(file,"%s\t\tadd rdx,48\n",file);
-  sprintf(file,"%s\t\tmov byte[r9],dl\n",file);
-  sprintf(file,"%s\t\tcmp rax,0\n",file);
-  sprintf(file,"%s\t\tjne divloop\n",file);
-  sprintf(file,"%s\t\tmov r10,20\n",file);
-  sprintf(file,"%s\t\tmov r10,r8\n",file);
-  sprintf(file,"%s\t\tmov rax,1\n",file);
-  sprintf(file,"%s\t\tmov rdi,1\n",file);
-  sprintf(file,"%s\t\tmov rsi,r9\n",file);
-  sprintf(file,"%s\t\tmov rdx,r10\n",file);
-  sprintf(file,"%s\t\tsyscall\n",file);
-  sprintf(file,"%s\t\tret\n",file);
-  // gen print hex num function
-  sprintf(file,"%sprint_hexnum:\n",file);
-  sprintf(file,"%s\t\tmov r8,20\n",file);
-  sprintf(file,"%s\t\tmov rbx,16\n",file);
-  sprintf(file,"%sdivloop2:\n",file);
-  sprintf(file,"%s\t\tdec r8\n",file);
-  sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
-  sprintf(file,"%s\t\txor rdx,rdx\n",file);
-  sprintf(file,"%s\t\tidiv rbx\n",file);
-  sprintf(file,"%s\t\tcmp rdx,10\n",file);
-  sprintf(file,"%s\t\tjge genAF\n",file);
-  sprintf(file,"%s\t\tjmp gen09\n",file);
-  sprintf(file,"%sgenAF:\n",file);
-  sprintf(file,"%s\t\tadd rdx,65\n",file);
-  sprintf(file,"%s\t\tsub rdx,48\n",file);
-  sprintf(file,"%sgen09:\n",file);
-  sprintf(file,"%s\t\tadd rdx,48\n",file);
-  sprintf(file,"%s\t\tmov byte[r9],dl\n",file);
-  sprintf(file,"%s\t\tcmp rax,0\n",file);
-  sprintf(file,"%s\t\tjne divloop2\n",file);
-  sprintf(file,"%s\t\tdec r8\n",file);
-  sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
-  sprintf(file,"%s\t\tmov byte[r9],120\n",file);
-  sprintf(file,"%s\t\tdec r8\n",file);
-  sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
-  sprintf(file,"%s\t\tmov byte[r9],48\n",file);
-  sprintf(file,"%s\t\tmov r10,20\n",file);
-  sprintf(file,"%s\t\tmov r10,r8\n",file);
-  sprintf(file,"%s\t\tmov rax,1\n",file);
-  sprintf(file,"%s\t\tmov rdi,1\n",file);
-  sprintf(file,"%s\t\tmov rsi,r9\n",file);
-  sprintf(file,"%s\t\tmov rdx,r10\n",file);
-  sprintf(file,"%s\t\tsyscall\n",file);
-  sprintf(file,"%s\t\tret\n",file);
-
+  if(sd_flag)
+  {
+    // gen print dec num function
+    sprintf(file,"%sprint_decnum:\n",file);
+    sprintf(file,"%s\t\tmov r8,20\n",file);
+    sprintf(file,"%s\t\tmov rbx,10\n",file);
+    sprintf(file,"%sdivloop:\n",file);
+    sprintf(file,"%s\t\tdec r8\n",file);
+    sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
+    sprintf(file,"%s\t\txor rdx,rdx\n",file);
+    sprintf(file,"%s\t\tidiv rbx\n",file);
+    sprintf(file,"%s\t\tadd rdx,48\n",file);
+    sprintf(file,"%s\t\tmov byte[r9],dl\n",file);
+    sprintf(file,"%s\t\tcmp rax,0\n",file);
+    sprintf(file,"%s\t\tjne divloop\n",file);
+    sprintf(file,"%s\t\tmov r10,20\n",file);
+    sprintf(file,"%s\t\tmov r10,r8\n",file);
+    sprintf(file,"%s\t\tmov rax,1\n",file);
+    sprintf(file,"%s\t\tmov rdi,1\n",file);
+    sprintf(file,"%s\t\tmov rsi,r9\n",file);
+    sprintf(file,"%s\t\tmov rdx,r10\n",file);
+    sprintf(file,"%s\t\tsyscall\n",file);
+    sprintf(file,"%s\t\tret\n",file);
+  }
+  if(sh_flag)
+  {
+    // gen print hex num function
+    sprintf(file,"%sprint_hexnum:\n",file);
+    sprintf(file,"%s\t\tmov r8,20\n",file);
+    sprintf(file,"%s\t\tmov rbx,16\n",file);
+    sprintf(file,"%sdivloop2:\n",file);
+    sprintf(file,"%s\t\tdec r8\n",file);
+    sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
+    sprintf(file,"%s\t\txor rdx,rdx\n",file);
+    sprintf(file,"%s\t\tidiv rbx\n",file);
+    sprintf(file,"%s\t\tcmp rdx,10\n",file);
+    sprintf(file,"%s\t\tjge genAF\n",file);
+    sprintf(file,"%s\t\tjmp gen09\n",file);
+    sprintf(file,"%sgenAF:\n",file);
+    sprintf(file,"%s\t\tadd rdx,65\n",file);
+    sprintf(file,"%s\t\tsub rdx,48\n",file);
+    sprintf(file,"%sgen09:\n",file);
+    sprintf(file,"%s\t\tadd rdx,48\n",file);
+    sprintf(file,"%s\t\tmov byte[r9],dl\n",file);
+    sprintf(file,"%s\t\tcmp rax,0\n",file);
+    sprintf(file,"%s\t\tjne divloop2\n",file);
+    sprintf(file,"%s\t\tdec r8\n",file);
+    sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
+    sprintf(file,"%s\t\tmov byte[r9],120\n",file);
+    sprintf(file,"%s\t\tdec r8\n",file);
+    sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
+    sprintf(file,"%s\t\tmov byte[r9],48\n",file);
+    sprintf(file,"%s\t\tmov r10,20\n",file);
+    sprintf(file,"%s\t\tmov r10,r8\n",file);
+    sprintf(file,"%s\t\tmov rax,1\n",file);
+    sprintf(file,"%s\t\tmov rdi,1\n",file);
+    sprintf(file,"%s\t\tmov rsi,r9\n",file);
+    sprintf(file,"%s\t\tmov rdx,r10\n",file);
+    sprintf(file,"%s\t\tsyscall\n",file);
+    sprintf(file,"%s\t\tret\n",file);
+  }
   strcat(file,"\0");
   FILE* fp;
   fp = fopen(filename,"w");

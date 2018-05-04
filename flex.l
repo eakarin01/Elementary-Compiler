@@ -7,6 +7,7 @@ IS			(u|U|l|L)*
 err         .
 
 %option noyywrap
+%option yylineno
 
 %{
     #include <stdio.h>
