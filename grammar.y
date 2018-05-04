@@ -114,13 +114,17 @@ command:
                     }
 
 
-| T_SDEC T_VAR T_ENDL
+| T_SDEC expression T_ENDL
+              {
+                parameter.ret = *($2);
+                $$=gen_code("SHD",parameter);
+              }
 
-| T_SDEC D_NUM T_ENDL
-
-| T_SHEX T_VAR T_ENDL
-
-| T_SHEX H_NUM T_ENDL
+| T_SHEX expression T_ENDL
+              {
+                parameter.ret = *($2);
+                $$=gen_code("SHH",parameter);
+              }
 
 | T_SHNL T_ENDL                       { 
                                         $$=gen_code("SHN",parameter);
@@ -446,7 +450,7 @@ struct return_val* gen_code(char * format,struct argument arg)
       sprintf(command,"%s%s",arg.ret.cmd,arg.ret2.cmd);
       // MUL command
       // if right is in rax
-      if (!strcmp(arg.ret2.reg,"rax"))
+      if (!strcmp(arg.ret2.reg,asmreg[0]))
       {
         int regid = selectReg();
         sprintf(command,"%s\t\tmov %s,%s\n",command,asmreg[regid],arg.ret2.reg);
@@ -456,7 +460,7 @@ struct return_val* gen_code(char * format,struct argument arg)
         clearReg(arg.ret.reg);
       }
       // if left is not in rax
-      else if (strcmp(arg.ret.reg,"rax"))
+      else if (strcmp(arg.ret.reg,asmreg[0]))
       {
         // check if rax has been use
         if (usereg[0])
@@ -481,7 +485,7 @@ struct return_val* gen_code(char * format,struct argument arg)
       //sprintf(command,"%sPUSH rdx\nIMUL %s\nPOP rdx\n",command,regname);
       sprintf(command,"%s\t\tIMUL %s\n",command,regname);
       clearReg(regname);
-      strcpy(ret->reg,"rax");
+      strcpy(ret->reg,asmreg[0]);
       if (checkpush)
       {
         int regid = selectReg();
@@ -505,7 +509,7 @@ struct return_val* gen_code(char * format,struct argument arg)
       sprintf(command,"%s%s",arg.ret.cmd,arg.ret2.cmd);
       // DIV command
       // if right is in rax
-      if (!strcmp(arg.ret2.reg,"rax"))
+      if (!strcmp(arg.ret2.reg,asmreg[0]))
       {
         int regid = selectReg();
         sprintf(command,"%s\t\tmov %s,%s\n",command,asmreg[regid],arg.ret2.reg);
@@ -515,7 +519,7 @@ struct return_val* gen_code(char * format,struct argument arg)
         usereg[0]=1;
       }
       // if left is not in rax
-      else if (strcmp(arg.ret.reg,"rax"))
+      else if (strcmp(arg.ret.reg,asmreg[0]))
       {
         // check if rax has been use
         if (usereg[0])
@@ -539,7 +543,7 @@ struct return_val* gen_code(char * format,struct argument arg)
       }
       sprintf(command,"%s\t\txor rdx,rdx\n\t\tIDIV %s\n",command,regname);
       clearReg(regname);
-      strcpy(ret->reg,"rax");
+      strcpy(ret->reg,asmreg[0]);
       if (checkpush)
       {
         int regid = selectReg();
@@ -563,7 +567,7 @@ struct return_val* gen_code(char * format,struct argument arg)
       sprintf(command,"%s%s",arg.ret.cmd,arg.ret2.cmd);
       // MOD command
       // if right is in rax
-      if (!strcmp(arg.ret2.reg,"rax"))
+      if (!strcmp(arg.ret2.reg,asmreg[0]))
       {
         int regid = selectReg();
         sprintf(command,"%s\t\tmov %s,%s\n",command,asmreg[regid],arg.ret2.reg);
@@ -571,10 +575,10 @@ struct return_val* gen_code(char * format,struct argument arg)
         sprintf(command,"%s\t\tmov rax,%s\n",command,arg.ret.reg);
         usereg[0]=1;
         clearReg(arg.ret.reg);
-        strcpy(arg.ret.reg,"rax");
+        strcpy(arg.ret.reg,asmreg[0]);
       }
       // if left is not in rax
-      else if (strcmp(arg.ret.reg,"rax"))
+      else if (strcmp(arg.ret.reg,asmreg[0]))
       {
         // check if rax has been use
         if (usereg[0])
@@ -585,7 +589,7 @@ struct return_val* gen_code(char * format,struct argument arg)
         sprintf(command,"%s\t\tmov rax,%s\n",command,arg.ret.reg);
         usereg[0]=1;
         clearReg(arg.ret.reg);  
-        strcpy(arg.ret.reg,"rax");
+        strcpy(arg.ret.reg,asmreg[0]);
       }
       // create register for return value 2
       // if right is not register
@@ -619,7 +623,7 @@ struct return_val* gen_code(char * format,struct argument arg)
       char command[10000];
       char data[10000];
       sprintf(command,"\t\tmov rax,1\n\t\tmov rdi,1\n\t\tmov rsi,msg%d\n\t\tmov rdx,%d\n\t\tsyscall\n",msgcount,arg.len);
-      sprintf(data,"\t\tmsg%d dq %s, 0\n",msgcount++,parameter.value);
+      sprintf(data,"\t\tmsg%d db %s, 0\n",msgcount++,parameter.value);
       strcpy(ret->cmd,command);
       strcpy(ret->data,data);
       //printf("[%s]",ret->cmd);
@@ -639,6 +643,61 @@ struct return_val* gen_code(char * format,struct argument arg)
       strcpy(ret->data,"");
       //printf("%s",command);
       //printf("[%s]",data);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
+      return ret;
+    }
+    else if(!strcmp(format,"SHD"))
+    {
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[10000];
+      // get return cmd
+      sprintf(command,"%s",arg.ret.cmd);
+      // check if reg is not RAX
+      if(strcmp(arg.ret.reg,asmreg[0]))
+      {
+        sprintf(command,"%s\t\tmov %s,%s\n",command,asmreg[0],arg.ret.reg);
+        clearReg(arg.ret.reg);
+        strcpy(arg.ret.reg,asmreg[0]);
+      }
+      sprintf(command,"%s\t\tcall print_decnum\n",command);
+      clearReg(arg.ret.reg);
+      strcpy(ret->cmd,command);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
+      return ret;
+    }
+    else if(!strcmp(format,"empty"))
+    {
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      strcpy(ret->cmd,"");
+      strcpy(ret->data,"");
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
+      return ret;
+    }
+    else if(!strcmp(format,"SHH"))
+    {
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[10000];
+      // get return cmd
+      sprintf(command,"%s",arg.ret.cmd);
+      // check if reg is not RAX
+      if(strcmp(arg.ret.reg,asmreg[0]))
+      {
+        sprintf(command,"%s\t\tmov %s,%s\n",command,asmreg[0],arg.ret.reg);
+        clearReg(arg.ret.reg);
+        strcpy(arg.ret.reg,asmreg[0]);
+      }
+      sprintf(command,"%s\t\tcall print_hexnum\n",command);
+      clearReg(arg.ret.reg);
+      strcpy(ret->cmd,command);
 
       strcat(ret->cmd,"\0");
       strcat(ret->reg,"\0");
@@ -791,16 +850,73 @@ struct return_val* gen_cond(char * format,struct argument arg)
 
 
 
-
 void genasmfile(char text[],char data[])
 {
   char file[10000];
+  // gen data section
   sprintf(file,"section .data\n%s",data);
   // gen newline character
-  sprintf(file,"%s\t\tCRLF db 10, 0\n\n",file);
+  sprintf(file,"%s\t\tCRLF db 10, 0\n",file);
+  // gen bss section
+  sprintf(file,"%ssection .bss\n\t\tnumber resb 20\n",file);
   sprintf(file,"%ssection .text\n\t\tglobal _start\n_start:\n%s\n",file,text);
   // add exit program to my program
-  sprintf(file,"%s\t\tmov rax,60\n\t\tmov rdi,0\n\t\tsyscall",file);
+  sprintf(file,"%s\t\tmov rax,60\n\t\tmov rdi,0\n\t\tsyscall\n\n",file);
+  // gen print dec num function
+  sprintf(file,"%sprint_decnum:\n",file);
+  sprintf(file,"%s\t\tmov r8,20\n",file);
+  sprintf(file,"%s\t\tmov rbx,10\n",file);
+  sprintf(file,"%sdivloop:\n",file);
+  sprintf(file,"%s\t\tdec r8\n",file);
+  sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
+  sprintf(file,"%s\t\txor rdx,rdx\n",file);
+  sprintf(file,"%s\t\tidiv rbx\n",file);
+  sprintf(file,"%s\t\tadd rdx,48\n",file);
+  sprintf(file,"%s\t\tmov byte[r9],dl\n",file);
+  sprintf(file,"%s\t\tcmp rax,0\n",file);
+  sprintf(file,"%s\t\tjne divloop\n",file);
+  sprintf(file,"%s\t\tmov r10,20\n",file);
+  sprintf(file,"%s\t\tmov r10,r8\n",file);
+  sprintf(file,"%s\t\tmov rax,1\n",file);
+  sprintf(file,"%s\t\tmov rdi,1\n",file);
+  sprintf(file,"%s\t\tmov rsi,r9\n",file);
+  sprintf(file,"%s\t\tmov rdx,r10\n",file);
+  sprintf(file,"%s\t\tsyscall\n",file);
+  sprintf(file,"%s\t\tret\n",file);
+  // gen print hex num function
+  sprintf(file,"%sprint_hexnum:\n",file);
+  sprintf(file,"%s\t\tmov r8,20\n",file);
+  sprintf(file,"%s\t\tmov rbx,16\n",file);
+  sprintf(file,"%sdivloop2:\n",file);
+  sprintf(file,"%s\t\tdec r8\n",file);
+  sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
+  sprintf(file,"%s\t\txor rdx,rdx\n",file);
+  sprintf(file,"%s\t\tidiv rbx\n",file);
+  sprintf(file,"%s\t\tcmp rdx,10\n",file);
+  sprintf(file,"%s\t\tjge genAF\n",file);
+  sprintf(file,"%s\t\tjmp gen09\n",file);
+  sprintf(file,"%sgenAF:\n",file);
+  sprintf(file,"%s\t\tadd rdx,65\n",file);
+  sprintf(file,"%s\t\tsub rdx,48\n",file);
+  sprintf(file,"%sgen09:\n",file);
+  sprintf(file,"%s\t\tadd rdx,48\n",file);
+  sprintf(file,"%s\t\tmov byte[r9],dl\n",file);
+  sprintf(file,"%s\t\tcmp rax,0\n",file);
+  sprintf(file,"%s\t\tjne divloop2\n",file);
+  sprintf(file,"%s\t\tdec r8\n",file);
+  sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
+  sprintf(file,"%s\t\tmov byte[r9],120\n",file);
+  sprintf(file,"%s\t\tdec r8\n",file);
+  sprintf(file,"%s\t\tlea r9,[number+r8]\n",file);
+  sprintf(file,"%s\t\tmov byte[r9],48\n",file);
+  sprintf(file,"%s\t\tmov r10,20\n",file);
+  sprintf(file,"%s\t\tmov r10,r8\n",file);
+  sprintf(file,"%s\t\tmov rax,1\n",file);
+  sprintf(file,"%s\t\tmov rdi,1\n",file);
+  sprintf(file,"%s\t\tmov rsi,r9\n",file);
+  sprintf(file,"%s\t\tmov rdx,r10\n",file);
+  sprintf(file,"%s\t\tsyscall\n",file);
+  sprintf(file,"%s\t\tret\n",file);
 
   strcat(file,"\0");
   FILE* fp;
