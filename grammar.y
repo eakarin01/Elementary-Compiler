@@ -14,6 +14,7 @@
         char* var_name;
         struct return_val ret;
         struct return_val ret2;
+        struct return_val ret3;
     }parameter;
     int yylex(void);
     void yyerror (char const *);
@@ -23,10 +24,12 @@
     int isRegister(char []);
     void genasmfile(char[],char[]);
     struct return_val* gen_code(char*,struct argument);
+    struct return_val* gen_cond(char*,struct argument);
     char asmreg[][5] = {"rax","rbx","rdx"};
     int usereg[3] = {0,0,0};
     int loopcount = 0;
     int msgcount = 0;
+    int ifcount = 0;
     int varflag[26];
     FILE *fp;
     char filename[20];
@@ -55,7 +58,7 @@
 %token T_ENDL
 
 %type<text> value T_PLUS T_MINUS T_MUL T_DIV T_MOD T_ENDL
-%type<ret> expression command assign statement input
+%type<ret> expression command assign statement input condition
 
 %start start;
 
@@ -88,11 +91,28 @@ command:
                       parameter.ret = *($6);
                       $$=gen_code("LOOPN",parameter);
                     }
+| T_LOOP LEFT_PAREN condition RIGHT_PAREN T_ENDL statement T_SEMI T_ENDL
+                    {
+                      parameter.ret = *($3);
+                      parameter.ret2 = *($6);
+                      $$=gen_code("LOOPW",parameter);
+                    }
+
 | T_IF condition T_THEN T_ENDL statement T_SEMI T_ENDL
+                    {
+                      parameter.ret = *($2);
+                      parameter.ret2 = *($5);
+                      $$=gen_code("IF",parameter);
+                    }
 
 | T_IF condition T_THEN T_ENDL statement T_SEMI T_ENDL T_ELSE T_ENDL statement T_SEMI T_ENDL
+                    {
+                      parameter.ret = *($2);
+                      parameter.ret2 = *($5);
+                      parameter.ret3 = *($10);
+                      $$=gen_code("IFELSE",parameter);
+                    }
 
-| T_LOOP LEFT_PAREN condition RIGHT_PAREN T_ENDL statement T_SEMI T_ENDL
 
 | T_SDEC T_VAR T_ENDL
 
@@ -126,8 +146,44 @@ statement:
 ;
 
 condition:
-  value compare value
+  expression T_EQUL expression
+                                    {
+                                      parameter.ret = *($1);
+                                      parameter.ret2 = *($3);
+                                      $$=gen_cond("je",parameter);
+                                    }
+| expression T_MORE expression
+                                    {
+                                      parameter.ret = *($1);
+                                      parameter.ret2 = *($3);
+                                      $$=gen_cond("jg",parameter);
+                                    }
+| expression T_LESS expression
+                                    {
+                                      parameter.ret = *($1);
+                                      parameter.ret2 = *($3);
+                                      $$=gen_cond("jl",parameter);
+                                    }
+| expression T_MOREEQ expression
+                                    {
+                                      parameter.ret = *($1);
+                                      parameter.ret2 = *($3);
+                                      $$=gen_cond("jge",parameter);
+                                    }
+| expression T_LESSEQ expression
+                                    {
+                                      parameter.ret = *($1);
+                                      parameter.ret2 = *($3);
+                                      $$=gen_cond("jle",parameter);
+                                    }
+| expression T_NOTEQ expression
+                                    {
+                                      parameter.ret = *($1);
+                                      parameter.ret2 = *($3);
+                                      $$=gen_cond("jne",parameter);
+                                    }
 ;
+
 
 value:
   D_NUM             {strcat($1,"\0");$$=$1;}
@@ -179,16 +235,6 @@ expression:
 | T_MINUS expression %prec NEG    { parameter.ret2 = *($2);
                                     $$=gen_code("NEG",parameter);
                                   }
-;
-
-
-compare:
-  T_EQUL
-| T_MORE
-| T_LESS
-| T_MOREEQ
-| T_LESSEQ
-| T_NOTEQ
 ;
 
 
@@ -652,8 +698,98 @@ struct return_val* gen_code(char * format,struct argument arg)
       strcat(ret->data,"\0");
       return ret;
     }
+    else if(!strcmp(format,"LOOPW"))
+    {
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[10000];
+      sprintf(command,"LC%d:\n%s\t\t%s LS%d\n\t\tjmp LX%d\n",loopcount,arg.ret.cmd,arg.ret.reg,loopcount,loopcount);
+      sprintf(command,"%sLS%d:\n%s\t\tjmp LC%d\nLX%d:\n",command,loopcount,arg.ret2.cmd,loopcount,loopcount);
+      loopcount++;
+      strcpy(ret->cmd,command);
+      strcpy(ret->data,arg.ret2.data);
 
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
+      return ret;
+    }
+    else if(!strcmp(format,"IF"))
+    {
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[10000];
+      // get condition command
+      strcpy(command,arg.ret.cmd);
+      sprintf(command,"%s\t\t%s C%d\n\t\tjmp EC%d\nC%d:\n",command,arg.ret.reg,ifcount,ifcount,ifcount);
+      // get statement command
+      sprintf(command,"%s%sEC%d:\n",command,arg.ret2.cmd,ifcount);
+      ifcount++;
+      strcpy(ret->cmd,command);
+      strcpy(ret->data,arg.ret2.data);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
+      return ret;
+    }
+    else if(!strcmp(format,"IFELSE"))
+    {
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[10000];
+      // get condition command
+      strcpy(command,arg.ret.cmd);
+      sprintf(command,"%s\t\t%s C%d\n\t\tjmp EC%d\nC%d:\n",command,arg.ret.reg,ifcount,ifcount,ifcount);
+      // get statement command
+      sprintf(command,"%s%s\t\tjmp EX%d\nEC%d:\n%sEX%d:\n",command,arg.ret2.cmd,ifcount,ifcount,arg.ret3.cmd,ifcount);
+      ifcount++;
+      strcpy(ret->cmd,command);
+      strcpy(ret->data,arg.ret2.data);
+      strcat(ret->data,arg.ret3.data);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
+      return ret;
+    }
 }
+
+struct return_val* gen_cond(char * format,struct argument arg)
+{
+      struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
+      char command[10000];
+      char reg[10];
+      strcpy(command,arg.ret.cmd);
+      strcat(command,arg.ret2.cmd);
+      // check left is not register
+      if (!isRegister(arg.ret.reg))
+      {
+        int regid = selectReg();
+        sprintf(command,"%s\t\tMOV %s,%s\n",command,asmreg[regid],arg.ret.reg);
+        clearReg(arg.ret.reg);
+        strcpy(arg.ret.reg,asmreg[regid]);
+      }
+      // check right is not register
+      if (!isRegister(arg.ret2.reg))
+      {
+        int regid = selectReg();
+        sprintf(command,"%s\t\tMOV %s,%s\n",command,asmreg[regid],arg.ret2.reg);
+        clearReg(arg.ret2.reg);
+        strcpy(arg.ret2.reg,asmreg[regid]);
+      }
+      // both are register !!
+      sprintf(command,"%s\t\tcmp %s,%s\n",command,arg.ret.reg,arg.ret2.reg);
+      clearReg(arg.ret.reg);
+      clearReg(arg.ret2.reg);
+      sprintf(reg,"%s",format);
+      strcpy(ret->cmd,command);
+      strcpy(ret->reg,reg);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
+      return ret;
+}
+
+
 
 
 void genasmfile(char text[],char data[])

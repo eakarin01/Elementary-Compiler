@@ -47,7 +47,7 @@ else            { return T_ELSE;}
 ">="            { return T_MOREEQ;}
 "<="            { return T_LESSEQ;}
 "!="            { return T_NOTEQ;}
-LOOP            { return T_LOOP;}
+loop            { return T_LOOP;}
 ","             { return T_COMMA;}
 \"(\\.|[^\\"])*\" { yylval.text = strdup(yytext);return STRING_LITERAL;}
 \'(\\.|[^\\"])*\' { yylval.text = strdup(yytext);return STRING_LITERAL;}
