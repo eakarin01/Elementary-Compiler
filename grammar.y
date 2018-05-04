@@ -29,8 +29,6 @@
     int msgcount = 0;
     int varflag[26];
     FILE *fp;
-    char textcode[10000] = "";
-    char datacode[10000] = "";
     char filename[20];
 %}
 
@@ -56,18 +54,22 @@
 %precedence NEG
 %token T_ENDL
 
-%type<text> value T_PLUS T_MINUS T_MUL T_DIV T_MOD
+%type<text> value T_PLUS T_MINUS T_MUL T_DIV T_MOD T_ENDL
 %type<ret> expression command assign statement input
+
+%start start;
 
 /* The grammar follows. */
 
 %%
 start:
-  input { genasmfile($1->cmd,$1->data);}
+  input   {
+            genasmfile($1->cmd,$1->data);
+          }
 ;
 input:
   %empty    {$$=gen_code("empty",parameter);}
-| input command     {  //printf("---------------------------------\n%s",$2->data);
+| input command     {  //printf("---------------------------------\n%s",$2->cmd);
                       parameter.ret = *($1);
                       parameter.ret2 = *($2);
                       $$=gen_code("concat",parameter);
@@ -75,7 +77,9 @@ input:
 ;
 
 command:
-  T_ENDL
+  T_ENDL            { //printf("ONLYENDL\n");
+                     $$=gen_code("empty",parameter);
+                     }
 | assign T_ENDL                       { $$=$1;}
 
 | T_LOOP LEFT_PAREN value RIGHT_PAREN T_ENDL statement T_SEMI T_ENDL
@@ -84,10 +88,12 @@ command:
                       parameter.ret = *($6);
                       $$=gen_code("LOOPN",parameter);
                     }
+| T_IF condition T_THEN T_ENDL statement T_SEMI T_ENDL
+
+| T_IF condition T_THEN T_ENDL statement T_SEMI T_ENDL T_ELSE T_ENDL statement T_SEMI T_ENDL
 
 | T_LOOP LEFT_PAREN condition RIGHT_PAREN T_ENDL statement T_SEMI T_ENDL
 
-| if_stmt 
 | T_SDEC T_VAR T_ENDL
 
 | T_SDEC D_NUM T_ENDL
@@ -102,17 +108,12 @@ command:
 
 | T_SHSTR STRING_LITERAL T_ENDL       { parameter.value=$2;
                                         parameter.len=strlen($2)-2;
-                                        $$=gen_code("SHS",parameter);
+                                        $$=gen_code("SHS",parameter);   
                                       }
 
 ;
 
-if_stmt:
-  T_IF condition T_THEN T_ENDL statement T_SEMI T_ENDL
 
-| T_IF condition T_THEN T_ENDL statement T_SEMI T_ENDL T_ELSE T_ENDL statement T_SEMI T_ENDL
-
-;
 
 statement:
   %empty      {$$=gen_code("empty",parameter);}
@@ -129,13 +130,13 @@ condition:
 ;
 
 value:
-  D_NUM             {$$=$1;}
-| H_NUM             {$$=$1;}
-| T_VAR             {$$=$1;}
+  D_NUM             {strcat($1,"\0");$$=$1;}
+| H_NUM             {strcat($1,"\0");$$=$1;}
+| T_VAR             {strcat($1,"\0");$$=$1;}
 ;
 
 assign:
-  T_VAR T_ASS expression    { 
+  T_VAR T_ASS expression    { strcat($1,"\0");
                               parameter.var_name=$1;
                               parameter.ret = *($3);
                               $$=gen_code("assign",parameter);
@@ -145,7 +146,8 @@ assign:
 
 
 expression:
-  value             { parameter.value=$1;
+  value             { strcat($1,"\0");
+                      parameter.value=$1;
                       $$=gen_code("value",parameter);
                       //printf("[%d]",atoi($1));
                     }
@@ -265,6 +267,10 @@ struct return_val* gen_code(char * format,struct argument arg)
         sprintf(regname,"[%s]",arg.value);
       strcpy(ret->cmd,"");
       strcpy(ret->reg,regname);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"assign"))
@@ -297,6 +303,10 @@ struct return_val* gen_code(char * format,struct argument arg)
       strcpy(ret->cmd,command);
       //printf("%s",command);
       //printf("[%s]",ret->data);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"+"))
@@ -322,6 +332,10 @@ struct return_val* gen_code(char * format,struct argument arg)
       strcpy(ret->cmd,command);
       strcpy(ret->reg,arg.ret.reg);
       clearReg(arg.ret2.reg);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"-"))
@@ -347,6 +361,10 @@ struct return_val* gen_code(char * format,struct argument arg)
       strcpy(ret->cmd,command);
       strcpy(ret->reg,arg.ret.reg);
       clearReg(arg.ret2.reg);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"NEG"))
@@ -367,6 +385,10 @@ struct return_val* gen_code(char * format,struct argument arg)
       sprintf(command,"%s\t\tNEG %s\n",command,arg.ret2.reg);
       strcpy(ret->cmd,command);
       strcpy(ret->reg,arg.ret2.reg);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"*"))
@@ -422,6 +444,10 @@ struct return_val* gen_code(char * format,struct argument arg)
         strcpy(ret->reg,asmreg[regid]);
       }
       strcpy(ret->cmd,command);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"/"))
@@ -476,6 +502,10 @@ struct return_val* gen_code(char * format,struct argument arg)
         strcpy(ret->reg,asmreg[regid]);
       }
       strcpy(ret->cmd,command);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"%%"))
@@ -531,6 +561,10 @@ struct return_val* gen_code(char * format,struct argument arg)
       sprintf(command,"%s\t\tmov %s,rdx\n",command,asmreg[newregid]);
       strcpy(ret->reg,asmreg[newregid]);
       strcpy(ret->cmd,command);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"SHS"))
@@ -542,8 +576,12 @@ struct return_val* gen_code(char * format,struct argument arg)
       sprintf(data,"\t\tmsg%d dq %s, 0\n",msgcount++,parameter.value);
       strcpy(ret->cmd,command);
       strcpy(ret->data,data);
-      //printf("%s",command);
-      //printf("[%s]",data);
+      //printf("[%s]",ret->cmd);
+      //printf("(%s)dsfsdfds",ret->data);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"SHN"))
@@ -555,6 +593,10 @@ struct return_val* gen_code(char * format,struct argument arg)
       strcpy(ret->data,"");
       //printf("%s",command);
       //printf("[%s]",data);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"empty"))
@@ -562,6 +604,10 @@ struct return_val* gen_code(char * format,struct argument arg)
       struct return_val* ret = (struct return_val*)malloc(sizeof(struct return_val));
       strcpy(ret->cmd,"");
       strcpy(ret->data,"");
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"concat"))
@@ -577,6 +623,10 @@ struct return_val* gen_code(char * format,struct argument arg)
       strcat(data,arg.ret2.data);
       strcpy(ret->cmd,command);
       strcpy(ret->data,data);
+
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
     else if(!strcmp(format,"LOOPN"))
@@ -592,9 +642,13 @@ struct return_val* gen_code(char * format,struct argument arg)
         strcpy(arg.value,regname);
       }
       sprintf(command,"\t\tPUSH rcx\n\t\tMOV rcx,%s\nL%d:\n\t\tPUSH rcx\n",arg.value,loopcount);
-      sprintf(command,"%s%s\t\tPOP rcx\n\t\tLOOP L%d\n\t\tPOP rcx\n",command,arg.ret.cmd,loopcount++);
+      sprintf(command,"%s%s\t\tPOP rcx\n\t\tdec rcx\n\t\tjnz L%d\n\t\tPOP rcx\n",command,arg.ret.cmd,loopcount++);
       strcpy(ret->cmd,command);
       strcpy(ret->data,arg.ret.data);
+      
+      strcat(ret->cmd,"\0");
+      strcat(ret->reg,"\0");
+      strcat(ret->data,"\0");
       return ret;
     }
 
@@ -610,6 +664,8 @@ void genasmfile(char text[],char data[])
   sprintf(file,"%ssection .text\n\t\tglobal _start\n_start:\n%s\n",file,text);
   // add exit program to my program
   sprintf(file,"%s\t\tmov rax,60\n\t\tmov rdi,0\n\t\tsyscall",file);
+
+  strcat(file,"\0");
   FILE* fp;
   fp = fopen(filename,"w");
   fprintf(fp,"%s",file);
@@ -621,7 +677,7 @@ int main(int args,char* argv[])
 {
   if (!argv[1]) 
   {
-    printf("Error: missing output filename\n");
+    fprintf(stderr,"Error: missing output filename\n");
     return 0;
   }
   strcpy(filename,argv[1]);

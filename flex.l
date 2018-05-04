@@ -17,7 +17,7 @@ err         .
 %%
 "//".*\n        ; // ignore comment
 [ \t]           ; // ignore all whitespace
-\n				{ yylval.text = strdup("");return T_ENDL;}
+\n				{ yylval.text = strdup("\0");return T_ENDL;}
 [0-9]+          { yylval.text = strdup(yytext);return D_NUM;}
 [0-9A-F]+[hH]   { yylval.text = strdup(yytext);return H_NUM;}
 
