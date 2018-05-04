@@ -970,7 +970,7 @@ void genasmfile(char text[],char data[])
     sprintf(file,"%s\t\tjge genAF\n",file);
     sprintf(file,"%s\t\tjmp gen09\n",file);
     sprintf(file,"%sgenAF:\n",file);
-    sprintf(file,"%s\t\tadd rdx,65\n",file);
+    sprintf(file,"%s\t\tadd rdx,55\n",file);
     sprintf(file,"%s\t\tsub rdx,48\n",file);
     sprintf(file,"%sgen09:\n",file);
     sprintf(file,"%s\t\tadd rdx,48\n",file);
