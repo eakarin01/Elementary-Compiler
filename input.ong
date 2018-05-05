@@ -1,0 +1,27 @@
+$vA = 100-1
+$vB = 1
+
+// check each number is prime
+loop($vA)
+    // pick a number
+    $vB=$vB+1
+    $vC = 2
+    $vP = 0
+
+    // pick divide number
+    loop($vC<$vB)
+        // if can divide
+        if $vB%$vC==0 then
+            $vP=$vP+1
+        ;
+        $vC=$vC+1
+    ;
+    if $vP==0 then
+        SHD $vB
+        SHS " "
+    ;
+
+;
+    SHN
+    
+
